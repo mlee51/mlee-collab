@@ -1,103 +1,121 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useRef } from 'react';
+import FileUploader from '../components/FileUploader';
+import { storage, db } from '../firebase/config';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection, addDoc } from 'firebase/firestore';
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [files, setFiles] = useState([]);
+  const fileInputRef = useRef(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+  const handleFileUpload = async (file, position) => {
+    // Create temporary file object
+    const tempId = `temp-${Date.now()}`;
+    const tempFile = {
+      id: tempId,
+      name: file.name,
+      type: file.type,
+      position,
+      isUploading: true,
+      zIndex: files.length + 1 // Ensure new file is on top
+    };
+
+    // Add temporary file to the list
+    setFiles(prev => [...prev, tempFile]);
+
+    try {
+      // Upload file to Firebase Storage
+      const storageRef = ref(storage, `files/${file.name}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+
+      // Add file metadata to Firestore
+      const docRef = await addDoc(collection(db, 'files'), {
+        name: file.name,
+        type: file.type,
+        url: downloadURL,
+        position,
+        zIndex: files.length + 1, // Store zIndex in Firestore
+        createdAt: new Date().toISOString()
+      });
+
+      // Replace temporary file with real file
+      setFiles(prev => prev.map(f => 
+        f.id === tempId 
+          ? {
+              id: docRef.id,
+              name: file.name,
+              type: file.type,
+              url: downloadURL,
+              position,
+              zIndex: files.length + 1
+            }
+          : f
+      ));
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      // Remove temporary file on error
+      setFiles(prev => prev.filter(f => f.id !== tempId));
+    }
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    const droppedFiles = Array.from(e.dataTransfer.files);
+
+    for (const file of droppedFiles) {
+      const position = { x: e.clientX - 75, y: e.clientY - 75 };
+      await handleFileUpload(file, position);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleFileSelect = async (e) => {
+    const selectedFiles = Array.from(e.target.files);
+    
+    for (const file of selectedFiles) {
+      // Position the file in the center of the viewport
+      const position = { 
+        x: window.innerWidth / 2 - 75, 
+        y: window.innerHeight / 2 - 75 
+      };
+      await handleFileUpload(file, position);
+    }
+    
+    // Reset the file input
+    e.target.value = '';
+  };
+
+  return (
+    <main 
+      className="min-h-screen"
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+    >
+      <div className="fixed top-4 left-4 z-50 flex items-center gap-4">
+        <h1 className="text-2xl font-bold text-white">
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="px-4 py-2 bg-white/10 backdrop-blur-sm text-white rounded-lg hover:bg-white/20 transition-colors"
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        drop files anywhere
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        </h1>
+
     </div>
+      <FileUploader files={files} setFiles={setFiles} />
+    </main>
   );
 }
