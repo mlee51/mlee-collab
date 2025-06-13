@@ -9,6 +9,7 @@ import { collection, addDoc } from 'firebase/firestore';
 export default function Home() {
   const [files, setFiles] = useState([]);
   const fileInputRef = useRef(null);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
 
   const handleFileUpload = async (file, position) => {
     // Create temporary file object
@@ -66,7 +67,10 @@ export default function Home() {
     const droppedFiles = Array.from(e.dataTransfer.files);
 
     for (const file of droppedFiles) {
-      const position = { x: e.clientX - 75, y: e.clientY - 75 };
+      const position = { 
+        x: e.clientX - 75 - panOffset.x, 
+        y: e.clientY - 75 - panOffset.y 
+      };
       await handleFileUpload(file, position);
     }
   };
@@ -79,10 +83,10 @@ export default function Home() {
     const selectedFiles = Array.from(e.target.files);
     
     for (const file of selectedFiles) {
-      // Position the file in the center of the viewport
+      // Position the file in the center of the viewport, accounting for pan offset
       const position = { 
-        x: window.innerWidth / 2 - 75, 
-        y: window.innerHeight / 2 - 75 
+        x: (window.innerWidth / 2 - 75) - panOffset.x, 
+        y: (window.innerHeight / 2 - 75) - panOffset.y 
       };
       await handleFileUpload(file, position);
     }
@@ -113,9 +117,13 @@ export default function Home() {
           className="hidden"
         />
         </h1>
-
-    </div>
-      <FileUploader files={files} setFiles={setFiles} />
+      </div>
+      <FileUploader 
+        files={files} 
+        setFiles={setFiles} 
+        panOffset={panOffset}
+        setPanOffset={setPanOffset}
+      />
     </main>
   );
 }

@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
-const TextNote = ({ note, onUpdate, onDelete, isDragging, onDragStart, onDragMove, onDragEnd, isTouchDevice }) => {
-  const [isEditing, setIsEditing] = useState(!note.text);
-  const [text, setText] = useState(note.text);
+export default function TextNote({ note, onUpdate, onDelete, isDragging, onDragStart, onDragMove, onDragEnd, isTouchDevice }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [text, setText] = useState(note.text || '');
   const [isSelected, setIsSelected] = useState(false);
-  const [hasMoved, setHasMoved] = useState(false);
   const textareaRef = useRef(null);
   const noteRef = useRef(null);
 
@@ -16,25 +15,9 @@ const TextNote = ({ note, onUpdate, onDelete, isDragging, onDragStart, onDragMov
     }
   }, [isEditing]);
 
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (noteRef.current && !noteRef.current.contains(e.target)) {
-        setIsSelected(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('touchstart', handleClickOutside);
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    };
-  }, []);
-
   const handleSave = () => {
     if (text.trim()) {
-      onUpdate({ ...note, text: text.trim() });
+      onUpdate(note.id, { ...note, text });
     } else {
       onDelete(note.id);
     }
@@ -46,34 +29,32 @@ const TextNote = ({ note, onUpdate, onDelete, isDragging, onDragStart, onDragMov
       e.preventDefault();
       handleSave();
     } else if (e.key === 'Escape') {
-      setText(note.text);
       setIsEditing(false);
+      setText(note.text || '');
     }
   };
 
   const handleClick = (e) => {
     e.stopPropagation();
-    if (!hasMoved) {
-      setIsSelected(true);
-      if (!isEditing) {
-        setIsEditing(true);
-      }
+    setIsSelected(true);
+    if (!isEditing) {
+      setIsEditing(true);
     }
-    setHasMoved(false);
   };
 
   const handleStart = (e) => {
-    setHasMoved(false);
+    if (isEditing) return;
     onDragStart(e, note);
   };
 
   const handleMove = (e) => {
-    if (!hasMoved) {
-      const movement = Math.abs(e.movementX) + Math.abs(e.movementY);
-      if (movement > 5) {
-        setHasMoved(true);
-      }
-    }
+    if (isEditing) return;
+    onDragMove(e);
+  };
+
+  const handleEnd = () => {
+    if (isEditing) return;
+    onDragEnd();
   };
 
   return (
@@ -92,6 +73,8 @@ const TextNote = ({ note, onUpdate, onDelete, isDragging, onDragStart, onDragMov
       onTouchStart={isTouchDevice ? handleStart : undefined}
       onMouseMove={!isTouchDevice ? handleMove : undefined}
       onTouchMove={isTouchDevice ? handleMove : undefined}
+      onMouseUp={!isTouchDevice ? handleEnd : undefined}
+      onTouchEnd={isTouchDevice ? handleEnd : undefined}
       onClick={handleClick}
     >
       <div className="bg-white/10 backdrop-blur-sm p-4 rounded-lg shadow-lg hover:shadow-xl transition-shadow min-w-[200px]">
@@ -129,6 +112,4 @@ const TextNote = ({ note, onUpdate, onDelete, isDragging, onDragStart, onDragMov
       </div>
     </div>
   );
-};
-
-export default TextNote; 
+} 
