@@ -254,6 +254,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
   };
 
   const handleEnd = () => {
+    console.log()
     if (!isDragging || !draggedFile) return;
     
     console.log('Finished dragging:', 'type' in draggedFile ? (draggedFile.type.startsWith('audio/') ? 'audio file' : 'image file') : 'note');
@@ -279,7 +280,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
     
     setDraggedFile(null);
     setIsDragging(false);
-    setHasMoved(false);
+    // setHasMoved(false);
   };
 
   const handlePanStart = (e) => {
@@ -366,30 +367,37 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
   const currentFile = files.find(file => file.id === playingFile);
 
   const handleBackgroundClick = (e) => {
+    console.log(1)
     if (isDragging || hasMoved) return;
-    
+    console.log(2)
     // Only show plus button if it was a click (no movement)
-    if (isClicking && !hasMoved) {
+    if (!hasMoved) {
       setAddButtonPosition({
         x: e.clientX,
         y: e.clientY
       });
       setShowAddButton(true);
       console.log('Plus button appeared at:', { x: e.clientX, y: e.clientY });
+   
     }
-    if (e.target === containerRef.current) {
-      // Only show add button if it was a click (not a drag)
-      if (!hasMoved) {
-        setAddButtonPosition({
-          x: e.clientX,
-          y: e.clientY
-        });
-        setShowAddButton(true);
+
+    // Save and deselect any selected note
+    if (selectedNote) {
+      const currentNote = notes.find(note => note.id === selectedNote);
+      if (currentNote && currentNote.text !== editingText) {
+        console.log('Saving note before deselecting:', selectedNote);
+        handleNoteSave(selectedNote);
+      } else {
+        console.log('Deselecting note without changes:', selectedNote);
+        setSelectedNote(null);
+        setEditingText('');
       }
+    }
+
+    // Deselect any selected file
+    if (selectedFile) {
+      console.log('Deselecting file:', selectedFile);
       setSelectedFile(null);
-      setSelectedNote(null);
-      setIsEditing(false);
-      setEditingText('');
     }
   };
 
@@ -397,16 +405,18 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
     const newNote = {
       text: '',
       position: {
-        x: addButtonPosition.x - panOffset.x,
-        y: addButtonPosition.y - panOffset.y
+        x: addButtonPosition.x - panOffsetRef.current.x, 
+        y: addButtonPosition.y - panOffsetRef.current.y, 
       },
       zIndex: maxZIndex + 1
     };
 
     try {
       const docRef = await addDoc(collection(db, 'notes'), newNote);
-      setNotes([...notes, { ...newNote, id: docRef.id }]);
-      setMaxZIndex(maxZIndex + 1);
+      const noteWithId = { ...newNote, id: docRef.id };
+      setNotes(prevNotes => [...prevNotes, noteWithId]);
+      setSelectedNote(docRef.id); // Select the new note
+      setEditingText(''); // Clear editing text
       setShowAddButton(false);
     } catch (error) {
       console.error('Error adding note:', error);
@@ -434,47 +444,29 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
   };
 
   const handleFileClick = (file) => {
-    if (hasMoved) {
-      setHasMoved(false);
+    // Don't activate if we're dragging or have moved
+    if (isDragging || hasMoved) {
+      console.log('Ignoring file click due to drag/movement');
       return;
     }
-    if (selectedFile === file.id) {
-      setSelectedFile(null);
-      if (file.type.startsWith('audio/')) {
-        audioRef.current.pause();
-        setPlayingFile(null);
-        setCurrentAudio(null);
-      }
-    } else {
-      setSelectedFile(file.id);
-      setSelectedNote(null);
-      if (file.type.startsWith('audio/')) {
-        if (playingFile) {
-          audioRef.current.pause();
-        }
-        audioRef.current.src = file.url;
-        audioRef.current.play();
-        setPlayingFile(file.id);
-        setCurrentAudio(file);
-      }
-    }
+
+    console.log('File clicked:', file.id);
+    setSelectedFile(file.id);
+    setSelectedNote(null);
+    setEditingText('');
   };
 
   const handleNoteClick = (note) => {
-    if (hasMoved) {
-      setHasMoved(false);
+    // Don't activate if we're dragging or have moved
+    if (isDragging || hasMoved) {
+      console.log('Ignoring click due to drag/movement');
       return;
     }
-    if (selectedNote === note.id) {
-      setSelectedNote(null);
-      setIsEditing(false);
-      setEditingText('');
-    } else {
-      setSelectedNote(note.id);
-      setSelectedFile(null);
-      setIsEditing(true);
-      setEditingText(note.text || '');
-    }
+    
+    console.log('Note clicked:', note.id);
+    setSelectedNote(note.id);
+    setEditingText(note.text || '');
+    setSelectedFile(null);
   };
 
   const handleNoteDoubleClick = (note) => {
@@ -482,24 +474,44 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
     setEditingText(note.text || '');
   };
 
+  const handleNoteKeyDown = (e, noteId) => {
+    console.log('Note keydown:', e.key);
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleNoteSave(noteId);
+    } else if (e.key === 'Escape') {
+      setSelectedNote(null);
+      setEditingText('');
+    }
+  };
+
   const handleNoteSave = async (noteId) => {
-    if (editingText.trim()) {
+    console.log('saving note');
+    try {
+      console.log('Saving note:', {
+        id: noteId,
+        text: editingText,
+        timestamp: new Date().toISOString()
+      });
+
       const noteRef = doc(db, 'notes', noteId);
       await updateDoc(noteRef, {
-        text: editingText.trim()
+        text: editingText
       });
-      setNotes(prevNotes =>
-        prevNotes.map(n =>
-          n.id === noteId
-            ? { ...n, text: editingText.trim() }
-            : n
+      
+      setNotes(prevNotes => 
+        prevNotes.map(note => 
+          note.id === noteId 
+            ? { ...note, text: editingText }
+            : note
         )
       );
-    } else {
-      await handleDeleteNote(noteId);
+      
+      setSelectedNote(null);
+      setEditingText('');
+    } catch (error) {
+      console.error('Error updating note:', error);
     }
-    setIsEditing(false);
-    setEditingText('');
   };
 
   const removeFile = async (fileId) => {
@@ -516,16 +528,6 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
       }
     } catch (error) {
       console.error('Error deleting file:', error);
-    }
-  };
-
-  const handleNoteKeyDown = (e, noteId) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleNoteSave(noteId);
-    } else if (e.key === 'Escape') {
-      setIsEditing(false);
-      setEditingText('');
     }
   };
 
@@ -657,21 +659,20 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
       >
         Come Home
       </button>
+      {/* Plus button for adding notes */}
       {showAddButton && (
-        <div
-          className="fixed bg-white/10 backdrop-blur-sm rounded-full w-12 h-12 flex items-center justify-center cursor-pointer hover:bg-white/20 transition-colors z-50"
+        <button
+          className="fixed z-[100] w-12 h-12 bg-white/10 backdrop-blur-sm text-white rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
+          onClick={handleAddNote}
           style={{
             left: addButtonPosition.x,
             top: addButtonPosition.y,
+            transition: 'all 0.2s ease-in-out',
             transform: 'translate(-50%, -50%)'
           }}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleAddNote();
-          }}
         >
-          <span className="text-2xl text-white">+</span>
-        </div>
+          +
+        </button>
       )}
       <div
         className="relative w-full h-full"
@@ -749,17 +750,14 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
                 key={note.id}
                 note={note}
                 isSelected={selectedNote === note.id}
-                isEditing={editingText.trim() !== ''}
+                isEditing={isEditing}
                 onSelect={() => handleNoteClick(note)}
-                onEdit={(text) => setEditingText(text)}
+                onEdit={(text) => handleNoteSave(note.id)}
                 onDelete={() => handleDeleteNote(note.id)}
                 onStartDrag={(e) => handleStart(e, note)}
-                onTouchStart={(e) => {
-                  e.stopPropagation();
-                  handleStart(e, note);
-                }}
                 editingText={editingText}
-                setEditingText={(text) => setEditingText(text)}
+                setEditingText={setEditingText}
+                onKeyDown={handleNoteKeyDown}
               />
             ))}
           </>

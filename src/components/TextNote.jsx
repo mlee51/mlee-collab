@@ -16,10 +16,10 @@ export default function TextNote({
   const textareaRef = useRef(null);
 
   useEffect(() => {
-    if (isEditing && textareaRef.current) {
+    if (isSelected && textareaRef.current) {
       textareaRef.current.focus();
     }
-  }, [isEditing]);
+  }, [isSelected]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -57,7 +57,7 @@ export default function TextNote({
       onClick={handleClick}
     >
       <div className="bg-white/10 backdrop-blur-sm p-4 rounded-lg shadow-lg hover:shadow-xl transition-shadow min-w-[200px]">
-        {isEditing ? (
+        {isSelected ? (
           <textarea
             ref={textareaRef}
             value={editingText}
