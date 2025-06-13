@@ -6,6 +6,8 @@ import { storage, db } from '../firebase/config';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc } from 'firebase/firestore';
 
+import AnimatedText from '../components/AnimatedText';
+
 export default function Home() {
   const [files, setFiles] = useState([]);
   const fileInputRef = useRef(null);
@@ -102,20 +104,20 @@ export default function Home() {
       onDragOver={handleDragOver}
     >
       <div className="fixed top-4 left-4 z-50 flex items-center gap-4">
-        <h1 className="text-2xl font-bold text-white">
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="px-4 py-2 bg-white/10 backdrop-blur-sm text-white rounded-lg hover:bg-white/20 transition-colors"
-        >
-        drop files anywhere
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          onChange={handleFileSelect}
-          className="hidden"
-        />
+        <h1 className="lg:text-2xl text-md font-bold text-white">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="gradient px-4 py-2 bg-white/10 backdrop-blur-sm  text-white rounded-lg hover:animate-pulse transition-colors"
+          >
+            <AnimatedText content="drop files anywhere " speed={150} className="font-mono tracking-wide whitespace-nowrap lg:w-75 w-50" />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+          />
         </h1>
       </div>
       <FileUploader 

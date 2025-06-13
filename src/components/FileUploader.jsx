@@ -41,6 +41,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
   const [scale, setScale] = useState(1);
   const [initialPosition, setInitialPosition] = useState({ x: 0, y: 0 });
   const panOffsetRef = useRef({ x: 0, y: 0 });
+  const [isAnimating, setIsAnimating] = useState(false);
 
   // Load initial position from URL
   useEffect(() => {
@@ -503,18 +504,14 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
   };
 
   const handleHomeClick = () => {
-    // Add a class to trigger the slow animation
-    const container = document.querySelector('.canvas-container');
-    if (container) {
-      container.classList.add('going-home');
-      // Remove the class after animation completes
-      setTimeout(() => {
-        container.classList.remove('going-home');
-      }, 1000);
-    }
+    setIsAnimating(true);
     panOffsetRef.current = { x: 0, y: 0 };
-    // Update URL to reflect home position
     window.history.replaceState(null, '', '#x=0&y=0');
+    
+    // Remove animation class after transition completes
+    setTimeout(() => {
+      setIsAnimating(false);
+    }, 1000); // Match this with the CSS transition duration
   };
 
   useEffect(() => {
@@ -562,7 +559,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
     >
       <button
         onClick={handleHomeClick}
-        className="fixed top-4 right-4 z-50 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-white/20 transition-colors shadow-lg"
+        className="fixed top-4 right-4 z-50 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-white/20 transition-colors "
       >
         Come Home
       </button>
@@ -582,11 +579,11 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
           <span className="text-2xl text-white">+</span>
         </div>
       )}
-      <div 
-        className="absolute inset-0 w-0 canvas-container"
+      <div
+        className="relative w-full h-full"
         style={{
           transform: `translate(${panOffsetRef.current.x}px, ${panOffsetRef.current.y}px)`,
-          // transition: isPanning ? 'none' : 'transform 1s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: isAnimating ? 'transform 1s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
           willChange: 'transform'
         }}
       >
