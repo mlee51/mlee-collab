@@ -196,6 +196,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
     setHasMoved(false);
     setIsDragging(true);
     setZIndex(item.id);
+    setShowAddButton(false);
     console.log('Started dragging:', 'type' in item ? (item.type.startsWith('audio/') ? 'audio file' : 'image file') : 'note');
   };
 
@@ -278,7 +279,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
   };
 
   const handlePanStart = (e) => {
-    if (!isPanningEnabled) return;
+    if (!isPanningEnabled || isTouchDevice) return;
 
     // Check if we're clicking on a file or note
     const isFileOrNote = e.target.closest('.file-item, .note-item');
@@ -291,6 +292,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
       setIsPanning(true);
       setIsClicking(true);
       setHasMoved(false);
+      setShowAddButton(false);
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
       const clientY = e.touches ? e.touches[0].clientY : e.clientY;
       setInitialPosition({ x: clientX, y: clientY });
@@ -520,6 +522,21 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
     }
   };
 
+  const handleHomeClick = () => {
+    // Add a class to trigger the slow animation
+    const container = document.querySelector('.canvas-container');
+    if (container) {
+      container.classList.add('going-home');
+      // Remove the class after animation completes
+      setTimeout(() => {
+        container.classList.remove('going-home');
+      }, 1000);
+    }
+    setPanOffset({ x: 0, y: 0 });
+    // Update URL to reflect home position
+    window.history.replaceState(null, '', '#x=0&y=0');
+  };
+
   useEffect(() => {
     const container = containerRef.current;
     if (container) {
@@ -549,24 +566,54 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
       onMouseDown={handlePanStart}
       onTouchMove={(e) => {
         e.preventDefault();
-        if (isPanning) handlePanMove(e);
-        else handleMove(e);
+        if (!isTouchDevice) {
+          if (isPanning) handlePanMove(e);
+          else handleMove(e);
+        } else {
+          handleMove(e);
+        }
       }}
       onTouchEnd={(e) => {
-        if (isPanning) handlePanEnd();
-        else handleEnd();
+        if (!isTouchDevice) {
+          if (isPanning) handlePanEnd();
+          else handleEnd();
+        } else {
+          handleEnd();
+        }
       }}
       onClick={handleBackgroundClick}
       style={{
-        cursor: isPanning ? 'grabbing' : (isPanningEnabled ? 'grab' : 'default'),
+        cursor: isTouchDevice ? 'default' : (isPanning ? 'grabbing' : (isPanningEnabled ? 'grab' : 'default')),
         touchAction: 'none'
       }}
     >
+      <button
+        onClick={handleHomeClick}
+        className="fixed top-4 right-4 z-50 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-white/20 transition-colors shadow-lg"
+      >
+        Come Home
+      </button>
+      {showAddButton && (
+        <div
+          className="fixed bg-white/10 backdrop-blur-sm rounded-full w-12 h-12 flex items-center justify-center cursor-pointer hover:bg-white/20 transition-colors z-50"
+          style={{
+            left: addButtonPosition.x,
+            top: addButtonPosition.y,
+            transform: 'translate(-50%, -50%)'
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleAddNote();
+          }}
+        >
+          <span className="text-2xl text-white">+</span>
+        </div>
+      )}
       <div 
-        className="absolute inset-0 w-0"
+        className="absolute inset-0 w-0 canvas-container"
         style={{
           transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
-          transition: isPanning ? 'none' : 'transform 0.1s ease-out',
+          transition: isPanning ? 'none' : 'transform 1s cubic-bezier(0.4, 0, 0.2, 1)',
           willChange: 'transform'
         }}
       >
@@ -651,22 +698,6 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
                 setEditingText={(text) => setEditingText(text)}
               />
             ))}
-            {showAddButton && (
-              <div
-                className="absolute bg-white/10 backdrop-blur-sm rounded-full w-12 h-12 flex items-center justify-center cursor-pointer hover:bg-white/20 transition-colors"
-                style={{
-                  left: addButtonPosition.x - 16,
-                  top: addButtonPosition.y - 16,
-                  transform: 'translate(-50%, -50%)'
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleAddNote();
-                }}
-              >
-                <span className="text-2xl text-white">+</span>
-              </div>
-            )}
           </>
         )}
       </div>
