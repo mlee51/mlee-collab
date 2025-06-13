@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { db } from '../firebase/config';
+import { db, storage } from '../firebase/config';
 import { collection, getDocs, deleteDoc, doc, updateDoc, addDoc } from 'firebase/firestore';
 import TextNote from './TextNote';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
-const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
+const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }) => {
   const [playingFile, setPlayingFile] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const audioRef = useRef(null);
@@ -173,6 +174,13 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
     loadData();
   }, []);
 
+  // Add onChange handler to fileInputRef
+  useEffect(() => {
+    if (fileInputRef.current) {
+      fileInputRef.current.onchange = handleFileSelect;
+    }
+  }, [fileInputRef]);
+
   const setZIndex = (id) => {
     setCurrentZIndex(prev => prev + 1);
     setFileZIndices(prev => ({
@@ -291,6 +299,13 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
       setShowAddButton(false);
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
       const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      
+      // Log the adjusted position
+      console.log('Mouse position adjusted for pan:', {
+        x: clientX - panOffsetRef.current.x,
+        y: clientY - panOffsetRef.current.y
+      });
+      
       setInitialPosition({ x: clientX, y: clientY });
       setLastPanPosition({ x: clientX, y: clientY });
     }
@@ -351,6 +366,17 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
   const currentFile = files.find(file => file.id === playingFile);
 
   const handleBackgroundClick = (e) => {
+    if (isDragging || hasMoved) return;
+    
+    // Only show plus button if it was a click (no movement)
+    if (isClicking && !hasMoved) {
+      setAddButtonPosition({
+        x: e.clientX,
+        y: e.clientY
+      });
+      setShowAddButton(true);
+      console.log('Plus button appeared at:', { x: e.clientX, y: e.clientY });
+    }
     if (e.target === containerRef.current) {
       // Only show add button if it was a click (not a drag)
       if (!hasMoved) {
@@ -514,6 +540,72 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
     }, 1000); // Match this with the CSS transition duration
   };
 
+  const handleFileUpload = async (file, position) => {
+    try {
+      // Create a unique filename
+      const timestamp = Date.now();
+      const uniqueFilename = `${timestamp}_${file.name}`;
+      
+      // Upload to Firebase Storage
+      const storageRef = ref(storage, uniqueFilename);
+      const uploadResult = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(uploadResult.ref);
+      
+      // Add to Firestore
+      const docRef = await addDoc(collection(db, 'files'), {
+        name: file.name,
+        type: file.type,
+        url: downloadURL,
+        position: position,
+        createdAt: new Date().toISOString()
+      });
+      
+      // Update local state
+      setFiles(prevFiles => [...prevFiles, {
+        id: docRef.id,
+        name: file.name,
+        type: file.type,
+        url: downloadURL,
+        position: position
+      }]);
+    } catch (error) {
+      console.error('Error uploading file:', error);
+    }
+  };
+
+  const handleFileSelect = async (e) => {
+    const selectedFiles = Array.from(e.target.files);
+    
+    for (const file of selectedFiles) {
+      // Position the file in the center of the viewport, accounting for pan offset
+      const position = { 
+        x: (window.innerWidth / 2 - 75) - panOffsetRef.current.x, 
+        y: (window.innerHeight / 2 - 75) - panOffsetRef.current.y 
+      };
+      await handleFileUpload(file, position);
+    }
+    
+    // Reset the file input
+    e.target.value = '';
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    const droppedFiles = Array.from(e.dataTransfer.files);
+
+    for (const file of droppedFiles) {
+      const position = { 
+        x: e.clientX - 75 - panOffsetRef.current.x, 
+        y: e.clientY - 75 - panOffsetRef.current.y 
+      };
+      await handleFileUpload(file, position);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
   useEffect(() => {
     const container = containerRef.current;
     if (container) {
@@ -552,6 +644,8 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
       }}
       onTouchStart={handlePanStart}
       onClick={handleBackgroundClick}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
       style={{
         cursor: isPanning ? 'grabbing' : (isPanningEnabled ? 'grab' : 'default'),
         touchAction: 'none'
@@ -559,7 +653,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
     >
       <button
         onClick={handleHomeClick}
-        className="fixed top-4 right-4 z-50 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-white/20 transition-colors "
+        className="fixed cursor-pointer top-4 right-4 z-50 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-white/20 transition-colors "
       >
         Come Home
       </button>

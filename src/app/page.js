@@ -10,8 +10,8 @@ import AnimatedText from '../components/AnimatedText';
 
 export default function Home() {
   const [files, setFiles] = useState([]);
-  const fileInputRef = useRef(null);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const fileInputRef = useRef(null);
 
   const handleFileUpload = async (file, position) => {
     // Create temporary file object
@@ -64,23 +64,6 @@ export default function Home() {
     }
   };
 
-  const handleDrop = async (e) => {
-    e.preventDefault();
-    const droppedFiles = Array.from(e.dataTransfer.files);
-
-    for (const file of droppedFiles) {
-      const position = { 
-        x: e.clientX - 75 - panOffset.x, 
-        y: e.clientY - 75 - panOffset.y 
-      };
-      await handleFileUpload(file, position);
-    }
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-  };
-
   const handleFileSelect = async (e) => {
     const selectedFiles = Array.from(e.target.files);
     
@@ -98,16 +81,12 @@ export default function Home() {
   };
 
   return (
-    <main 
-      className="min-h-screen"
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-    >
+    <main className="min-h-screen">
       <div className="fixed top-4 left-4 z-50 flex items-center gap-4">
         <h1 className="lg:text-2xl text-md font-bold text-white">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="gradient px-4 py-2 bg-white/10 backdrop-blur-sm  text-white rounded-lg hover:animate-pulse transition-colors"
+            className="cursor-pointer gradient px-4 py-2 bg-white/10 backdrop-blur-sm text-white rounded-lg hover:animate-pulse transition-colors"
           >
             <AnimatedText content="drop files anywhere " speed={150} className="font-mono tracking-wide whitespace-nowrap lg:w-75 w-50" />
           </button>
@@ -125,6 +104,7 @@ export default function Home() {
         setFiles={setFiles} 
         panOffset={panOffset}
         setPanOffset={setPanOffset}
+        fileInputRef={fileInputRef}
       />
     </main>
   );
