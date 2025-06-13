@@ -40,21 +40,16 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
   const [currentAudio, setCurrentAudio] = useState(null);
   const [scale, setScale] = useState(1);
   const [initialPosition, setInitialPosition] = useState({ x: 0, y: 0 });
+  const panOffsetRef = useRef({ x: 0, y: 0 });
 
   // Load initial position from URL
   useEffect(() => {
     const hash = window.location.hash;
     if (hash) {
-      try {
-        const params = new URLSearchParams(hash.substring(1));
-        const x = parseFloat(params.get('x'));
-        const y = parseFloat(params.get('y'));
-        if (!isNaN(x) && !isNaN(y)) {
-          setPanOffset({ x, y });
-        }
-      } catch (error) {
-        console.error('Error parsing URL hash:', error);
-      }
+      const params = new URLSearchParams(hash.substring(1));
+      const x = parseFloat(params.get('x')) || 0;
+      const y = parseFloat(params.get('y')) || 0;
+      panOffsetRef.current = { x, y };
     }
   }, []);
 
@@ -62,7 +57,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
   useEffect(() => {
     const hash = `#x=${Math.round(panOffset.x)}&y=${Math.round(panOffset.y)}`;
     if (window.location.hash !== hash) {
-      window.history.replaceState(null, '', hash);
+      // window.history.replaceState(null, '', hash);
     }
   }, [panOffset]);
 
@@ -279,7 +274,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
   };
 
   const handlePanStart = (e) => {
-    if (!isPanningEnabled || isTouchDevice) return;
+    if (!isPanningEnabled) return;
 
     // Check if we're clicking on a file or note
     const isFileOrNote = e.target.closest('.file-item, .note-item');
@@ -307,41 +302,26 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     
-    // Check if we've moved more than 5 pixels
-    const deltaX = clientX - initialPosition.x;
-    const deltaY = clientY - initialPosition.y;
-    if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
-      setHasMoved(true);
-      setIsClicking(false);
-    }
-
     const deltaX2 = clientX - lastPanPosition.x;
     const deltaY2 = clientY - lastPanPosition.y;
-    setPanOffset(prev => ({
-      x: prev.x + deltaX2,
-      y: prev.y + deltaY2
-    }));
+    
+    panOffsetRef.current = {
+      x: panOffsetRef.current.x + deltaX2,
+      y: panOffsetRef.current.y + deltaY2
+    };
+    
     setLastPanPosition({ x: clientX, y: clientY });
+    setHasMoved(true);
   };
 
   const handlePanEnd = () => {
-    if (!isPanningEnabled) return;
-
-    // Only show plus button if it was a click (no movement)
-    if (isClicking && !hasMoved) {
-      setAddButtonPosition({
-        x: lastPanPosition.x,
-        y: lastPanPosition.y
-      });
-      setShowAddButton(true);
-    }
-
-    // Force a URL update when panning ends
-    const hash = `#x=${Math.round(panOffset.x)}&y=${Math.round(panOffset.y)}`;
-    window.history.replaceState(null, '', hash);
-
     setIsPanning(false);
     setIsClicking(false);
+    setLastPanPosition({ x: 0, y: 0 });
+
+    // Update URL with current position after panning ends
+    const hash = `#x=${Math.round(panOffsetRef.current.x)}&y=${Math.round(panOffsetRef.current.y)}`;
+    window.history.replaceState(null, '', hash);
   };
 
   const handleWheel = (e) => {
@@ -532,7 +512,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
         container.classList.remove('going-home');
       }, 1000);
     }
-    setPanOffset({ x: 0, y: 0 });
+    panOffsetRef.current = { x: 0, y: 0 };
     // Update URL to reflect home position
     window.history.replaceState(null, '', '#x=0&y=0');
   };
@@ -566,24 +546,17 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
       onMouseDown={handlePanStart}
       onTouchMove={(e) => {
         e.preventDefault();
-        if (!isTouchDevice) {
-          if (isPanning) handlePanMove(e);
-          else handleMove(e);
-        } else {
-          handleMove(e);
-        }
+        if (isPanning) handlePanMove(e);
+        else handleMove(e);
       }}
       onTouchEnd={(e) => {
-        if (!isTouchDevice) {
-          if (isPanning) handlePanEnd();
-          else handleEnd();
-        } else {
-          handleEnd();
-        }
+        if (isPanning) handlePanEnd();
+        else handleEnd();
       }}
+      onTouchStart={handlePanStart}
       onClick={handleBackgroundClick}
       style={{
-        cursor: isTouchDevice ? 'default' : (isPanning ? 'grabbing' : (isPanningEnabled ? 'grab' : 'default')),
+        cursor: isPanning ? 'grabbing' : (isPanningEnabled ? 'grab' : 'default'),
         touchAction: 'none'
       }}
     >
@@ -612,8 +585,8 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
       <div 
         className="absolute inset-0 w-0 canvas-container"
         style={{
-          transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
-          transition: isPanning ? 'none' : 'transform 1s cubic-bezier(0.4, 0, 0.2, 1)',
+          transform: `translate(${panOffsetRef.current.x}px, ${panOffsetRef.current.y}px)`,
+          // transition: isPanning ? 'none' : 'transform 1s cubic-bezier(0.4, 0, 0.2, 1)',
           willChange: 'transform'
         }}
       >
