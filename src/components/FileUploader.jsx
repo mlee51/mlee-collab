@@ -285,6 +285,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
 
   const handlePanStart = (e) => {
     if (!isPanningEnabled) return;
+    setShowAddButton(false)
 
     // Check if we're clicking on a file or note
     const isFileOrNote = e.target.closest('.file-item, .note-item');
@@ -659,20 +660,24 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
       >
         Come Home
       </button>
-      {/* Plus button for adding notes */}
-      {showAddButton && (
-        <button
-          className="fixed z-[100] w-12 h-12 bg-white/10 backdrop-blur-sm text-white rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
-          onClick={handleAddNote}
+      { (
+        <div
+          
+          className={`fixed bg-white/10 backdrop-blur-sm rounded-full w-12 h-12 flex items-center justify-center cursor-pointer hover:bg-white/20 transition-colors z-50
+          ${showAddButton ? 'visible' : 'invisible'}`}
           style={{
             left: addButtonPosition.x,
             top: addButtonPosition.y,
-            transition: 'all 0.2s ease-in-out',
+            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             transform: 'translate(-50%, -50%)'
           }}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleAddNote();
+          }}
         >
-          +
-        </button>
+          <span className="text-2xl text-white">+</span>
+        </div>
       )}
       <div
         className="relative w-full h-full"
