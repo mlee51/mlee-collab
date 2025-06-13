@@ -18,8 +18,8 @@ const doto = Doto({
 });
 
 export const metadata = {
-  title: "collab.mlee.live",
-  description: "collab bro?",
+  title: "drop files anywhere",
+  description: "dropfilesanywhere.com",
 };
 
 export default function RootLayout({ children }) {
