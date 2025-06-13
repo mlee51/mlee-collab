@@ -11,11 +11,14 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
   const audioRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [draggedFile, setDraggedFile] = useState(null);
+  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [lastPosition, setLastPosition] = useState({ x: 0, y: 0 });
-  const [isLoading, setIsLoading] = useState(true);
   const [hasMoved, setHasMoved] = useState(false);
   const [maxZIndex, setMaxZIndex] = useState(1);
   const [fileZIndices, setFileZIndices] = useState({});
+  const [noteZIndices, setNoteZIndices] = useState({});
+  const [currentZIndex, setCurrentZIndex] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const progressBarRef = useRef(null);
@@ -174,100 +177,104 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
     loadData();
   }, []);
 
+  const setZIndex = (id) => {
+    setCurrentZIndex(prev => prev + 1);
+    setFileZIndices(prev => ({
+      ...prev,
+      [id]: currentZIndex + 1
+    }));
+  };
+
   const handleStart = (e, item) => {
     e.stopPropagation();
-    setIsPanningEnabled(false);
-    setHasMoved(false);
+    const clientX = e.clientX || e.touches[0].clientX;
+    const clientY = e.clientY || e.touches[0].clientY;
     
-    setIsDragging(true);
     setDraggedFile(item);
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    setStartPos({ x: clientX, y: clientY });
     setLastPosition({ x: clientX, y: clientY });
-    console.log('Started dragging:', item?.type?.startsWith('image/') ? 'image file' : 'audio file');
+    setHasMoved(false);
+    setIsDragging(true);
+    setZIndex(item.id);
+    console.log('Started dragging:', 'type' in item ? (item.type.startsWith('audio/') ? 'audio file' : 'image file') : 'note');
   };
 
   const handleMove = (e) => {
     if (!isDragging || !draggedFile) return;
 
-    e.preventDefault();
-    e.stopPropagation();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const clientX = e.clientX || e.touches[0].clientX;
+    const clientY = e.clientY || e.touches[0].clientY;
+    
     const deltaX = clientX - lastPosition.x;
     const deltaY = clientY - lastPosition.y;
-
+    
     if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
       setHasMoved(true);
-      if ('type' in draggedFile) {
-        // Handle file dragging
-        setFiles(prevFiles => 
-          prevFiles.map(f => 
-            f.id === draggedFile.id 
-              ? {
-                  ...f,
-                  position: {
-                    x: (f.position?.x || 0) + deltaX,
-                    y: (f.position?.y || 0) + deltaY
-                  }
+      console.log('Moving:', 'type' in draggedFile ? (draggedFile.type.startsWith('audio/') ? 'audio file' : 'image file') : 'note');
+    }
+
+    setLastPosition({ x: clientX, y: clientY });
+    
+    if ('type' in draggedFile) {
+      // Handle file dragging
+      setFiles(prevFiles => 
+        prevFiles.map(f => 
+          f.id === draggedFile.id 
+            ? { 
+                ...f, 
+                position: { 
+                  x: (f.position?.x || 0) + deltaX, 
+                  y: (f.position?.y || 0) + deltaY 
+                } 
+              }
+            : f
+        )
+      );
+    } else {
+      // Handle note dragging
+      setNotes(prevNotes =>
+        prevNotes.map(n =>
+          n.id === draggedFile.id
+            ? {
+                ...n,
+                position: {
+                  x: (n.position?.x || 0) + deltaX,
+                  y: (n.position?.y || 0) + deltaY
                 }
-              : f
-          )
-        );
-      } else {
-        // Handle note dragging
-        setNotes(prevNotes =>
-          prevNotes.map(n =>
-            n.id === draggedFile.id
-              ? {
-                  ...n,
-                  position: {
-                    x: (n.position?.x || 0) + deltaX,
-                    y: (n.position?.y || 0) + deltaY
-                  }
-                }
-              : n
-          )
-        );
-      }
-      setLastPosition({ x: clientX, y: clientY });
-      console.log('Moving:', 'type' in draggedFile ? 'file' : 'note');
+              }
+            : n
+        )
+      );
     }
   };
 
   const handleEnd = () => {
     if (!isDragging || !draggedFile) return;
     
-    // Save the final position to the database
+    console.log('Finished dragging:', 'type' in draggedFile ? (draggedFile.type.startsWith('audio/') ? 'audio file' : 'image file') : 'note');
+    
+    // Save final position to Firestore
     if ('type' in draggedFile) {
       // Update file position in Firestore
       const file = files.find(f => f.id === draggedFile.id);
       if (file) {
         updateDoc(doc(db, 'files', file.id), {
           position: file.position
-        }).catch(error => {
-          console.error('Error updating file position:', error);
         });
       }
     } else {
       // Update note position in Firestore
       const note = notes.find(n => n.id === draggedFile.id);
       if (note) {
-        // Only update if the note still exists (hasn't been deleted)
         updateDoc(doc(db, 'notes', note.id), {
           position: note.position
-        }).catch(error => {
-          // Only log error if it's not a "document doesn't exist" error
-          if (!error.message.includes('No document to update')) {
-            console.error('Error updating note position:', error);
-          }
         });
       }
     }
     
-    setIsDragging(false);
     setDraggedFile(null);
-    setIsPanningEnabled(true);
+    setIsDragging(false);
+    setHasMoved(false);
   };
 
   const handlePanStart = (e) => {
@@ -526,34 +533,29 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
   return (
     <div 
       ref={containerRef}
-      className="fixed inset-0 overflow-hidden bg-black/20 touch-none"
-      onMouseMove={!isTouchDevice ? (e) => {
+      className="fixed inset-0 overflow-hidden bg-black/20"
+      onMouseMove={(e) => {
         if (isPanning) handlePanMove(e);
         else handleMove(e);
-      } : undefined}
-      onTouchMove={isTouchDevice ? (e) => {
+      }}
+      onMouseUp={(e) => {
+        if (isPanning) handlePanEnd();
+        else handleEnd();
+      }}
+      onMouseLeave={(e) => {
+        if (isPanning) handlePanEnd();
+        else handleEnd();
+      }}
+      onMouseDown={handlePanStart}
+      onTouchMove={(e) => {
         e.preventDefault();
         if (isPanning) handlePanMove(e);
         else handleMove(e);
-      } : undefined}
-      onMouseUp={!isTouchDevice ? (e) => {
+      }}
+      onTouchEnd={(e) => {
         if (isPanning) handlePanEnd();
         else handleEnd();
-      } : undefined}
-      onTouchEnd={isTouchDevice ? (e) => {
-        e.preventDefault();
-        if (isPanning) handlePanEnd();
-        else handleEnd();
-      } : undefined}
-      onMouseLeave={!isTouchDevice ? (e) => {
-        if (isPanning) handlePanEnd();
-        else handleEnd();
-      } : undefined}
-      onMouseDown={!isTouchDevice ? handlePanStart : undefined}
-      onTouchStart={isTouchDevice ? (e) => {
-        e.preventDefault();
-        handlePanStart(e);
-      } : undefined}
+      }}
       onClick={handleBackgroundClick}
       style={{
         cursor: isPanning ? 'grabbing' : (isPanningEnabled ? 'grab' : 'default'),
@@ -561,30 +563,13 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
       }}
     >
       <div 
-        className="absolute inset-0 w-0 touch-none"
+        className="absolute inset-0 w-0"
         style={{
           transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
           transition: isPanning ? 'none' : 'transform 0.1s ease-out',
-          willChange: 'transform',
-          touchAction: 'none'
+          willChange: 'transform'
         }}
       >
-        {/* Test object for debugging panning */}
-        {/* <div 
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-red-500/50 rounded-lg flex items-center justify-center text-white font-bold"
-          style={{
-            zIndex: 9999
-          }}
-        >
-          Test Object
-          <div className="text-sm mt-2">
-            Pan: {panOffset.x.toFixed(0)}, {panOffset.y.toFixed(0)}
-          </div>
-          <div className="text-sm mt-1">
-            Panning: {isPanning ? 'Yes' : 'No'}
-          </div>
-        </div> */}
-
         {isLoading ? (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
@@ -597,7 +582,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
             {files.map((file) => (
               <div
                 key={file.id}
-                className={`absolute cursor-move select-none file-item touch-none ${
+                className={`absolute cursor-move select-none file-item ${
                   file.isUploading ? 'opacity-50' : ''
                 }`}
                 style={{
@@ -605,14 +590,13 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
                   top: file.position?.y || 0,
                   transform: isDragging && draggedFile?.id === file.id ? 'scale(1.05)' : 'none',
                   transition: isDragging ? 'none' : 'transform 0.2s',
-                  zIndex: fileZIndices[file.id] || 1,
-                  touchAction: 'none'
+                  zIndex: fileZIndices[file.id] || 1
                 }}
-                onMouseDown={!isTouchDevice ? (e) => handleStart(e, file) : undefined}
-                onTouchStart={isTouchDevice ? (e) => {
-                  e.preventDefault();
+                onMouseDown={(e) => handleStart(e, file)}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
                   handleStart(e, file);
-                } : undefined}
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   handleFileClick(file);
@@ -649,124 +633,92 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset }) => {
                 </div>
               </div>
             ))}
-
             {notes.map((note) => (
-              <div
+              <TextNote
                 key={note.id}
-                className="absolute cursor-move select-none note-item touch-none"
-                style={{
-                  left: note.position?.x || 0,
-                  top: note.position?.y || 0,
-                  transform: isDragging && draggedFile?.id === note.id ? 'scale(1.05)' : 'none',
-                  transition: isDragging ? 'none' : 'transform 0.2s',
-                  zIndex: note.zIndex || 1,
-                  touchAction: 'none'
-                }}
-                onMouseDown={!isTouchDevice ? (e) => handleStart(e, note) : undefined}
-                onTouchStart={isTouchDevice ? (e) => {
-                  e.preventDefault();
+                note={note}
+                isSelected={selectedNote === note.id}
+                isEditing={editingText.trim() !== ''}
+                onSelect={() => handleNoteClick(note)}
+                onEdit={(text) => setEditingText(text)}
+                onDelete={() => handleDeleteNote(note.id)}
+                onStartDrag={(e) => handleStart(e, note)}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
                   handleStart(e, note);
-                } : undefined}
+                }}
+                editingText={editingText}
+                setEditingText={(text) => setEditingText(text)}
+              />
+            ))}
+            {showAddButton && (
+              <div
+                className="absolute bg-white/10 backdrop-blur-sm rounded-full w-12 h-12 flex items-center justify-center cursor-pointer hover:bg-white/20 transition-colors"
+                style={{
+                  left: addButtonPosition.x - 16,
+                  top: addButtonPosition.y - 16,
+                  transform: 'translate(-50%, -50%)'
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleNoteClick(note);
+                  handleAddNote();
                 }}
               >
-                <div className="bg-white/10 backdrop-blur-sm p-4 rounded-lg shadow-lg hover:shadow-xl transition-shadow min-w-[200px]">
-                  {isEditing && selectedNote === note.id ? (
-                    <textarea
-                      ref={textareaRef}
-                      value={editingText}
-                      onChange={(e) => setEditingText(e.target.value)}
-                      onKeyDown={(e) => handleNoteKeyDown(e, note.id)}
-                      onBlur={() => handleNoteSave(note.id)}
-                      className="w-full bg-transparent text-white resize-none focus:outline-none"
-                      rows={3}
-                      placeholder="Enter your note..."
-                      autoFocus
-                    />
-                  ) : (
-                    <div className="text-white whitespace-pre-wrap break-words">
-                      {note.text || 'Click to edit...'}
-                    </div>
-                  )}
-                  {selectedNote === note.id && (
-                    <button
-                      className="remove-button absolute -top-2 -right-2 bg-red-500/80 backdrop-blur-sm text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteNote(note.id);
-                      }}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
+                <span className="text-2xl text-white">+</span>
               </div>
-            ))}
+            )}
           </>
         )}
       </div>
+      {currentFile && (
+        <div className="fixed bottom-0 left-0 right-0 px-4 py-2 z-50 backdrop-blur-xs select-none font-semibold pointer-events-auto">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (audioRef.current.paused) {
+                    audioRef.current.play();
+                  } else {
+                    audioRef.current.pause();
+                  }
+                }}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                  if (audioRef.current.paused) {
+                    audioRef.current.play();
+                  } else {
+                    audioRef.current.pause();
+                  }
+                }}
+                className="w-6 flex-auto text-center cursor-pointer hover:animate-pulse"
+              >
+                {audioRef.current?.paused ? "▶" : "❚❚"}
+              </button>
+            </div>
 
-      {/* Audio player - moved outside the panning container */}
-      <div className="pointer-events-none">
-        {currentFile && (
-          <div className="fixed bottom-0 left-0 right-0 px-4 py-2 z-50 backdrop-blur-xs select-none font-semibold pointer-events-auto">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    if (audioRef.current.paused) {
-                      audioRef.current.play();
-                    } else {
-                      audioRef.current.pause();
-                    }
-                  }}
-                  className="w-6 flex-auto text-center cursor-pointer hover:animate-pulse"
-                >
-                  {audioRef.current?.paused ? "▶" : "❚❚"}
-                </button>
+            <div className="flex-1 min-w-[200px] lg:mr-0">
+              <div className="font-medium truncate mb-[2px]">
+                {currentFile.name}
               </div>
-
-              <div className="flex-1 min-w-[200px] lg:mr-0">
-                <div className="font-medium truncate mb-[2px]">
-                  {currentFile.name}
-                </div>
+              <div
+                ref={progressBarRef}
+                className="h-2 border opacity-40 cursor-pointer w-full m-0"
+                onClick={seek}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                  seek(e);
+                }}
+              >
                 <div
-                  ref={progressBarRef}
-                  className="h-2 border opacity-40 cursor-pointer w-full m-0"
-                  onClick={seek}
-                  onTouchStart={seek}
-                >
-                  <div
-                    className="h-1.5 bg-foreground"
-                    style={{ width: `${(progress / (duration || 1)) * 100}%` }}
-                  />
-                </div>
-                <div className="text-xs mt-1">
-                  {format(progress)} / {format(duration)}
-                </div>
+                  className="h-1.5 bg-foreground"
+                  style={{ width: `${(progress / (duration || 1)) * 100}%` }}
+                />
+              </div>
+              <div className="text-xs mt-1">
+                {format(progress)} / {format(duration)}
               </div>
             </div>
           </div>
-        )}
-      </div>
-
-      {showAddButton && (
-        <div
-          className="fixed w-8 h-8 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center cursor-pointer hover:bg-white/20 transition-colors touch-none"
-          style={{
-            left: addButtonPosition.x - 16,
-            top: addButtonPosition.y - 16,
-            zIndex: 1000,
-            touchAction: 'none'
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleAddNote();
-          }}
-        >
-          <span className="text-white text-xl">+</span>
         </div>
       )}
     </div>
