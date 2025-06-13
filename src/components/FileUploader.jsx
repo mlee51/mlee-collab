@@ -354,6 +354,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
     isNaN(t) ? "--:--" : `${Math.floor(t / 60)}:${Math.floor(t % 60).toString().padStart(2, "0")}`;
 
   const seek = (e) => {
+    e.stopPropagation();
     const audio = audioRef.current;
     const progressBar = progressBarRef.current;
     if (!audio || !progressBar) return;
@@ -379,7 +380,6 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
       });
       setShowAddButton(true);
       console.log('Plus button appeared at:', { x: e.clientX, y: e.clientY });
-   
     }
 
     // Save and deselect any selected note
@@ -398,7 +398,9 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
     // Deselect any selected file
     if (selectedFile) {
       console.log('Deselecting file:', selectedFile);
+      console.log('Current file before deselect:', selectedFile);
       setSelectedFile(null);
+      console.log('File deselected');
     }
   };
 
@@ -452,9 +454,28 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
     }
 
     console.log('File clicked:', file.id);
-    setSelectedFile(file.id);
-    setSelectedNote(null);
-    setEditingText('');
+    console.log('Current file before update:', selectedFile);
+    
+    if (selectedFile === file.id) {
+      setSelectedFile(null);
+      if (file.type.startsWith('audio/')) {
+        audioRef.current.pause();
+        setPlayingFile(null);
+        setCurrentAudio(null);
+      }
+    } else {
+      setSelectedFile(file.id);
+      setSelectedNote(null);
+      if (file.type.startsWith('audio/')) {
+        if (playingFile) {
+          audioRef.current.pause();
+        }
+        audioRef.current.src = file.url;
+        audioRef.current.play();
+        setPlayingFile(file.id);
+        setCurrentAudio(file);
+      }
+    }
   };
 
   const handleNoteClick = (note) => {
@@ -532,7 +553,8 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
     }
   };
 
-  const handleHomeClick = () => {
+  const handleHomeClick = (e) => {
+    e.stopPropagation();
     setIsAnimating(true);
     panOffsetRef.current = { x: 0, y: 0 };
     window.history.replaceState(null, '', '#x=0&y=0');
@@ -656,7 +678,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
     >
       <button
         onClick={handleHomeClick}
-        className="fixed cursor-pointer top-4 right-4 z-50 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-white/20 transition-colors "
+        className="fixed cursor-pointer top-4 right-4 z-50 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-lg hover:bg-white/20 transition-colors z-[1000]"
       >
         Come Home
       </button>
@@ -773,12 +795,16 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   if (audioRef.current.paused) {
                     audioRef.current.play();
+                   
                   } else {
                     audioRef.current.pause();
+           
                   }
+                  
                 }}
                 onTouchStart={(e) => {
                   e.stopPropagation();
@@ -796,7 +822,7 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
 
             <div className="flex-1 min-w-[200px] lg:mr-0">
               <div className="font-medium truncate mb-[2px]">
-                {currentFile.name}
+                {currentFile?.name}
               </div>
               <div
                 ref={progressBarRef}
