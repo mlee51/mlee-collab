@@ -8,8 +8,10 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }) => {
   const [playingFile, setPlayingFile] = useState(null);
+  const [playingVideo, setPlayingVideo] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const audioRef = useRef(null);
+  const videoRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [draggedFile, setDraggedFile] = useState(null);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
@@ -462,11 +464,18 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
         audioRef.current.pause();
         setPlayingFile(null);
         setCurrentAudio(null);
+      } else if (file.type.startsWith('video/')) {
+        videoRef.current.pause();
+        setPlayingVideo(null);
+        setPlayingFile(null);
       }
     } else {
       setSelectedFile(file.id);
       setSelectedNote(null);
       if (file.type.startsWith('audio/')) {
+        if (!audioRef.current) {
+          audioRef.current = new Audio();
+        }
         if (playingFile) {
           audioRef.current.pause();
         }
@@ -474,6 +483,24 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
         audioRef.current.play();
         setPlayingFile(file.id);
         setCurrentAudio(file);
+      } else if (file.type.startsWith('video/')) {
+        if (!videoRef.current) {
+          videoRef.current = document.createElement('video');
+          videoRef.current.controls = true;
+          videoRef.current.style.width = '96px'; // w-24 = 96px
+          videoRef.current.style.height = '96px'; // h-24 = 96px
+          videoRef.current.style.objectFit = 'cover';
+          videoRef.current.style.borderRadius = '0.5rem';
+        }
+        console.log(playingVideo)
+        if (playingVideo) {
+          videoRef.current.pause();
+          setPlayingVideo(null);
+        } else {
+          videoRef.current.src = file.url;
+          videoRef.current.play();
+          setPlayingVideo(file.id);
+        }
       }
     }
   };
@@ -749,6 +776,20 @@ const FileUploader = ({ files, setFiles, panOffset, setPanOffset, fileInputRef }
                       className="w-24 h-24 object-cover rounded pointer-events-none"
                       draggable="false"
                     />
+                  ) : file.type.startsWith('video/') ? (
+                    playingVideo === file.id ? (
+                      <div 
+                        ref={el => {
+                          if (el && videoRef.current) {
+                            el.innerHTML = '';
+                            el.appendChild(videoRef.current);
+                          }
+                        }}
+                        className="w-24 h-24 rounded pointer-events-none"
+                      />
+                    ) : (
+                      <div className="text-4xl mb-2">🎬</div>
+                    )
                   ) : (
                     <div className="text-4xl mb-2">🎵</div>
                   )}
